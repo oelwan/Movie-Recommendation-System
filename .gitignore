@@ -1,9 +1,0 @@
-__pycache__/
-*.pyc
-
-movie_embeddings.pkl
-
-.venv/
-venv/
-
-.env
