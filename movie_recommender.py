@@ -1,3 +1,4 @@
+from rapidfuzz import process, fuzz
 import pandas as pd
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -82,22 +83,113 @@ feature_matrix = vectorizer.fit_transform(df['combined_features'])
 # -----------------------------
 similarity = cosine_similarity(feature_matrix)
 
+#--------------------------
+#this is for partial search 
+"""
+def find_matching_movies(query, df=df):
+    matches = df[
+        df['title'].str.contains(query, case=False, na=False)
+    ]['title'].tolist()
+
+    return matches
+"""
+
+#------------------------
+#Add a Fuzzy Search Function
+
+def find_best_match(query, df=df):
+
+    titles = df['title'].tolist()
+
+    match = process.extractOne(
+        query,
+        titles,
+        scorer=fuzz.WRatio,
+        score_cutoff=70
+    )
+
+    if match:
+        return match[0]
+
+    return None
+
+#---------------------
+
+
 # -----------------------------
 # 5. Recommendation Function
 # -----------------------------
 def recommend_movies(title, df=df, similarity=similarity, top_n=5):
-    """
-    Given a movie title, return the top N most similar movies.
-    """
+
+    # Exact match not found
     if title not in df['title'].values:
-        print(f"Movie '{title}' not found in the dataset.")
-        return []
+
+        # Try partial search first
+        matches = df[
+            df['title'].str.contains(title, case=False, na=False)
+        ]['title'].tolist()
+
+        if len(matches) > 0:
+
+            print("\nPossible matches:\n")
+
+            for i, movie in enumerate(matches[:10], 1):
+                print(f"{i}. {movie}")
+
+            choice = input(
+                "\nEnter the number of the movie: "
+            ).strip()
+
+            try:
+                title = matches[int(choice) - 1]
+
+            except:
+                print("Invalid choice.")
+                return None
+
+        else:
+
+            # Fall back to RapidFuzz
+            best_match = find_best_match(title)
+
+            if best_match:
+
+                print(f"\nMovie not found.")
+                print(f"Using closest match: {best_match}")
+
+                title = best_match
+
+            else:
+
+                print(f"\nNo movies matching '{title}' were found.")
+                return None
+
+    # Get movie index
     idx = df[df['title'] == title].index[0]
+
+    # Calculate similarity scores
     sim_scores = list(enumerate(similarity[idx]))
-    sim_scores = sorted(sim_scores, key=lambda x: x[1], reverse=True)
-    sim_scores = sim_scores[1:top_n+1]  # Exclude the movie itself
-    movie_indices = [i[0] for i in sim_scores]
-    return df['title'].iloc[movie_indices].tolist()
+
+    sim_scores = sorted(
+        sim_scores,
+        key=lambda x: x[1],
+        reverse=True
+    )
+
+    # Exclude the movie itself
+    sim_scores = sim_scores[1:top_n + 1]
+
+    recommendations = []
+
+    for movie_index, score in sim_scores:
+
+       movie_title = df['title'].iloc[movie_index]
+
+       recommendations.append(
+            (movie_title, score)
+       )
+
+    return title, recommendations
 
 # -----------------------------
 # 6. User Interaction
@@ -111,11 +203,30 @@ def main():
         if user_input.lower() == 'exit':
             print("Goodbye!")
             break
-        recommendations = recommend_movies(user_input)
-        if recommendations:
-            print(f"\nTop 5 movies similar to '{user_input}':")
-            for i, rec in enumerate(recommendations, 1):
-                print(f"{i}. {rec}")
+        result = recommend_movies(user_input)
+
+        if result:
+
+            selected_title, recommendations = result
+
+            # Get movie information
+            selected_movie = df[df['title'] == selected_title].iloc[0]
+
+            print("\n" + "="*50)
+            print(f"Selected Movie: {selected_title}")
+
+            print(f"Genres: {selected_movie['genres_clean']}")
+            print(f"Director: {selected_movie['director_clean']}")
+            print("="*50)
+
+            print(f"\nTop 5 movies similar to '{selected_title}':")
+
+            for i, (movie, score) in enumerate(recommendations, 1):
+
+                percentage = round(score * 100)
+
+                print(f"{i}. {movie} ({percentage}%)")
+
             print()
 
 if __name__ == "__main__":
