@@ -1,10 +1,12 @@
 from rapidfuzz import process, fuzz
 import pandas as pd
 import numpy as np
-from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
+from sentence_transformers import SentenceTransformer
 import ast
-
+import os
+import pickle
+import requests
 # -----------------------------
 # 1. Load the Dataset
 # -----------------------------
@@ -72,6 +74,7 @@ def combine_features(row):
 
 df['combined_features'] = df.apply(combine_features, axis=1)
 
+"""
 # -----------------------------
 # 3. Vectorization
 # -----------------------------
@@ -82,6 +85,64 @@ feature_matrix = vectorizer.fit_transform(df['combined_features'])
 # 4. Similarity Calculation
 # -----------------------------
 similarity = cosine_similarity(feature_matrix)
+"""
+""
+"""
+# -----------------------------
+# 3. Sentence Transformer Embeddings
+# -----------------------------
+
+print("Loading embedding model...")
+
+model = SentenceTransformer(
+    'all-MiniLM-L6-v2'
+)
+
+print("Generating movie embeddings...")
+
+embeddings = model.encode(
+    df['combined_features'].tolist(),
+    show_progress_bar=True
+)
+
+# -----------------------------
+# 4. Similarity Calculation
+# -----------------------------
+
+similarity = cosine_similarity(embeddings)
+
+"""
+
+EMBEDDINGS_FILE = "movie_embeddings.pkl"
+
+if os.path.exists(EMBEDDINGS_FILE):
+
+    print("Loading saved embeddings...")
+
+    with open(EMBEDDINGS_FILE, "rb") as f:
+        embeddings = pickle.load(f)
+
+else:
+
+    print("Loading embedding model...")
+
+    model = SentenceTransformer(
+        "all-MiniLM-L6-v2"
+    )
+
+    print("Generating movie embeddings...")
+
+    embeddings = model.encode(
+        df['combined_features'].tolist(),
+        show_progress_bar=True
+    )
+
+    with open(EMBEDDINGS_FILE, "wb") as f:
+        pickle.dump(embeddings, f)
+
+    print("Embeddings saved!")
+
+similarity = cosine_similarity(embeddings)
 
 #--------------------------
 #this is for partial search 
@@ -131,21 +192,8 @@ def recommend_movies(title, df=df, similarity=similarity, top_n=5):
 
         if len(matches) > 0:
 
-            print("\nPossible matches:\n")
-
-            for i, movie in enumerate(matches[:10], 1):
-                print(f"{i}. {movie}")
-
-            choice = input(
-                "\nEnter the number of the movie: "
-            ).strip()
-
-            try:
-                title = matches[int(choice) - 1]
-
-            except:
-                print("Invalid choice.")
-                return None
+            # Automatically use first match
+            title = matches[0]
 
         else:
 
@@ -154,14 +202,10 @@ def recommend_movies(title, df=df, similarity=similarity, top_n=5):
 
             if best_match:
 
-                print(f"\nMovie not found.")
-                print(f"Using closest match: {best_match}")
-
                 title = best_match
 
             else:
 
-                print(f"\nNo movies matching '{title}' were found.")
                 return None
 
     # Get movie index
@@ -176,20 +220,50 @@ def recommend_movies(title, df=df, similarity=similarity, top_n=5):
         reverse=True
     )
 
-    # Exclude the movie itself
     sim_scores = sim_scores[1:top_n + 1]
 
     recommendations = []
 
     for movie_index, score in sim_scores:
 
-       movie_title = df['title'].iloc[movie_index]
+        movie_title = df['title'].iloc[movie_index]
 
-       recommendations.append(
+        recommendations.append(
             (movie_title, score)
-       )
+        )
 
     return title, recommendations
+
+#------------------------------------------
+
+TMDB_API_KEY = "1e8eb1261af27a148144637b1c1415d7"
+
+def get_movie_poster(movie_title):
+
+    url = "https://api.themoviedb.org/3/search/movie"
+
+    params = {
+        "api_key": TMDB_API_KEY,
+        "query": movie_title
+    }
+
+    response = requests.get(url, params=params)
+
+    data = response.json()
+
+    if data["results"]:
+
+        poster_path = data["results"][0]["poster_path"]
+
+        if poster_path:
+
+            return (
+                "https://image.tmdb.org/t/p/w500"
+                + poster_path
+            )
+
+    return None
+
 
 # -----------------------------
 # 6. User Interaction
