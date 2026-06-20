@@ -1,3 +1,5 @@
+try it out -> https://movie-recommendation-system-fpurbffovkhsmn4hozsg6c.streamlit.app/
+
 # 🎬 Movie Recommendation System
 
 An AI-powered movie recommendation system built using the TMDb 5000 Movie Dataset. The project started as a simple content-based recommender using TF-IDF and cosine similarity, then evolved into a more intelligent recommendation system using semantic embeddings, fuzzy search, and a web interface.
